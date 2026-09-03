@@ -1,0 +1,109 @@
+isWhitespaceAt(String text, Int index): Bool
+{
+    if (index < 0 || index >= text.length)
+    {
+        return false
+    }
+
+    var c = text.substring(index, index + 1)
+
+    return c == " " ||
+           c == "\t" ||
+           c == "\n" ||
+           c == "\r"
+}
+
+trimText(String text): String
+{
+    var start = 0
+    var end = text.length
+
+    while (start < end && isWhitespaceAt(text, start))
+    {
+        start = start + 1
+    }
+
+    while (end > start && isWhitespaceAt(text, end - 1))
+    {
+        end = end - 1
+    }
+
+    return text.substring(start, end)
+}
+
+startsWithText(String text, String prefix): Bool
+{
+    if (prefix.length > text.length)
+    {
+        return false
+    }
+
+    return text.substring(0, prefix.length) == prefix
+}
+
+endsWithText(String text, String suffix): Bool
+{
+    if (suffix.length > text.length)
+    {
+        return false
+    }
+
+    return text.substring(
+        text.length - suffix.length,
+        text.length
+    ) == suffix
+}
+
+containsText(String text, String needle): Bool
+{
+    if (needle.length == 0)
+    {
+        return true
+    }
+
+    if (needle.length > text.length)
+    {
+        return false
+    }
+
+    var i = 0
+
+    while (i <= text.length - needle.length)
+    {
+        if (text.substring(i, i + needle.length) == needle)
+        {
+            return true
+        }
+
+        i = i + 1
+    }
+
+    return false
+}
+
+indexOfFrom(String text, String needle, Int start): Int
+{
+    if (needle.length == 0)
+    {
+        return start
+    }
+
+    if (needle.length > text.length)
+    {
+        return -1
+    }
+
+    var i = start
+
+    while (i <= text.length - needle.length)
+    {
+        if (text.substring(i, i + needle.length) == needle)
+        {
+            return i
+        }
+
+        i = i + 1
+    }
+
+    return -1
+}

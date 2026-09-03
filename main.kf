@@ -13,4 +13,24 @@ main()
     }
 
     println("[+] pid: " + pid)
+    println("")
+
+    var maps = readProcessMaps(pid)
+
+    if (maps.length == 0)
+    {
+        println(
+            "[-] nao foi possivel ler /proc/" +
+            pid +
+            "/maps"
+        )
+
+        return
+    }
+
+    println(
+        "[+] maps loaded: " +
+        maps.length +
+        " characters"
+    )
 }

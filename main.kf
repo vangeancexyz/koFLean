@@ -1,4 +1,4 @@
-main() 
+main()
 {
-    println("Hello")
+    println(trimText("  Hello  "))
 }

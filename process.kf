@@ -29,3 +29,17 @@ findPid(String processName): Int
 
     return -1
 }
+
+readProcessMaps(Int pid): String
+{
+    try
+    {
+        return Path(
+            "/proc/" + pid + "/maps"
+        ).readText()
+    }
+    catch (String e)
+    {
+        return ""
+    }
+}

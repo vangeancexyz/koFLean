@@ -1,4 +1,16 @@
 main()
 {
-    println(trimText("  Hello  "))
+    var processName = "kcalc"
+
+    println("[*] target: " + processName)
+
+    var pid = findPid(processName)
+
+    if (pid < 0)
+    {
+        println("[-] Process not found")
+        return
+    }
+
+    println("[+] pid: " + pid)
 }

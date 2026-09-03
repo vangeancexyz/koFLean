@@ -1,0 +1,31 @@
+import kof.io
+
+findPid(String processName): Int
+{
+    var pid = 1
+
+    while (pid <= 131072)
+    {
+        try
+        {
+            var cmdline =
+                Path("/proc/" + pid + "/cmdline").readText()
+
+            if (
+                cmdline.length > 0 &&
+                containsText(cmdline, processName)
+            )
+            {
+                return pid
+            }
+        }
+        catch (String e)
+        {
+            // Process non-existent, terminated, or without read permission
+        }
+
+        pid = pid + 1
+    }
+
+    return -1
+}

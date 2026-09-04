@@ -20,7 +20,7 @@ main()
     if (maps.length == 0)
     {
         println(
-            "[-] Unable to read /proc/" +
+            "[-] cannot read /proc/" +
             pid +
             "/maps"
         )
@@ -33,27 +33,9 @@ main()
         maps.length +
         " characters"
     )
-
-    var lineEnd = indexOfFrom(maps, "\n", 0)
-
-    if (lineEnd < 0)
-    {
-        lineEnd = maps.length
-    }
-
-    var firstLine = maps.substring(0, lineEnd)
-
-    var address = nextToken(firstLine, 0)
-    var permissions = nextToken(firstLine, address.next)
-    var offset = nextToken(firstLine, permissions.next)
-    var device = nextToken(firstLine, offset.next)
-    var inode = nextToken(firstLine, device.next)
-
     println("")
-    println("[FIRST MAP TOKENS]")
-    println("address     : " + address.text)
-    println("permissions : " + permissions.text)
-    println("offset      : " + offset.text)
-    println("device      : " + device.text)
-    println("inode       : " + inode.text)
+
+    scanMemoryMaps(maps, processName)
+
+    println("[+] done")
 }

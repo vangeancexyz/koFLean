@@ -1,0 +1,32 @@
+record MapLocation(
+    String addressStart,
+    String addressEnd,
+    String permissions
+)
+
+record MapBacking(
+    String offset,
+    String device,
+    String inode
+)
+
+record MemoryRegion(
+    Int valid,
+    MapLocation location,
+    MapBacking backing,
+    String pathname,
+    String mapType,
+    Int fileDeleted
+)
+
+invalidRegion(): MemoryRegion
+{
+    return MemoryRegion(
+        0,
+        MapLocation("", "", ""),
+        MapBacking("", "", ""),
+        "",
+        "unknown",
+        0
+    )
+}

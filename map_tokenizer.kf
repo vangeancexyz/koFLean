@@ -1,0 +1,29 @@
+record TokenResult(String text, Int next)
+
+nextToken(String line, Int start): TokenResult
+{
+    var cursor = start
+
+    while (
+        cursor < line.length &&
+        isWhitespaceAt(line, cursor)
+    )
+    {
+        cursor = cursor + 1
+    }
+
+    var begin = cursor
+
+    while (
+        cursor < line.length &&
+        !isWhitespaceAt(line, cursor)
+    )
+    {
+        cursor = cursor + 1
+    }
+
+    return TokenResult(
+        line.substring(begin, cursor),
+        cursor
+    )
+}

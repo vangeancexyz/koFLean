@@ -1,0 +1,298 @@
+isBaseMapping(
+    MemoryRegion region,
+    String processName
+): Bool
+{
+    return region.mapType == "file" &&
+           containsText(region.pathname, processName) &&
+           isZeroHex(region.backing.offset)
+}
+
+isProcessFile(
+    MemoryRegion region,
+    String processName
+): Bool
+{
+    return region.mapType == "file" &&
+           containsText(region.pathname, processName)
+}
+
+isSharedObject(MemoryRegion region): Bool
+{
+    if (region.mapType != "file")
+    {
+        return false
+    }
+
+    return endsWithText(region.pathname, ".so") ||
+           containsText(region.pathname, ".so.") ||
+           containsText(
+               region.pathname,
+               ".so (deleted)"
+           )
+}
+
+isAnonymousRegion(MemoryRegion region): Bool
+{
+    return region.mapType == "anonymous" ||
+           region.mapType == "anon_private" ||
+           region.mapType == "anon_shared"
+}
+
+isExecutableAnonymous(MemoryRegion region): Bool
+{
+    return isAnonymousRegion(region) &&
+           containsText(
+               region.location.permissions,
+               "x"
+           )
+}
+
+printRegion(MemoryRegion region)
+{
+    println(
+        "0x" + region.location.addressStart +
+        "-0x" + region.location.addressEnd +
+        "  " + region.location.permissions
+    )
+
+    println("type   : " + region.mapType)
+    println("offset : " + region.backing.offset)
+    println("device : " + region.backing.device)
+    println("inode  : " + region.backing.inode)
+
+    if (region.pathname.length > 0)
+    {
+        println("path   : " + region.pathname)
+    }
+
+    if (region.fileDeleted == 1)
+    {
+        println("state  : backing file deleted")
+    }
+
+    println("")
+}
+
+printRegionLabel(
+    MemoryRegion region,
+    String processName,
+    Bool basePrinted
+): Bool
+{
+    if (
+        !basePrinted &&
+        isBaseMapping(region, processName)
+    )
+    {
+        println("[BASE MAPPING]")
+        return true
+    }
+
+    if (region.mapType == "file")
+    {
+        if (region.fileDeleted == 1)
+        {
+            println("[DELETED FILE MAPPING]")
+        }
+        else if (isProcessFile(region, processName))
+        {
+            println("[PROCESS FILE]")
+        }
+        else if (isSharedObject(region))
+        {
+            println("[EXTERNAL SO CANDIDATE]")
+        }
+        else
+        {
+            println("[EXTERNAL FILE]")
+        }
+
+        return basePrinted
+    }
+
+    if (region.mapType == "heap")
+    {
+        println("[HEAP]")
+        return basePrinted
+    }
+
+    if (isAnonymousRegion(region))
+    {
+        if (isExecutableAnonymous(region))
+        {
+            println("[EXECUTABLE ANONYMOUS]")
+        }
+        else if (region.mapType == "anonymous")
+        {
+            println("[ANONYMOUS]")
+        }
+        else
+        {
+            println(
+                "[ANONYMOUS: " +
+                region.mapType +
+                "]"
+            )
+        }
+
+        return basePrinted
+    }
+
+    println(
+        "[SPECIAL MAPPING: " +
+        region.mapType +
+        "]"
+    )
+
+    return basePrinted
+}
+
+scanMemoryMaps(
+    String maps,
+    String processName
+)
+{
+    var cursor = 0
+    var basePrinted = false
+
+    var total = 0
+    var fileMappings = 0
+    var sharedObjectMappings = 0
+    var externalSoCandidateMappings = 0
+    var heapMappings = 0
+    var anonymousMappings = 0
+    var specialMappings = 0
+    var deletedFileMappings = 0
+    var executableAnonymousMappings = 0
+
+    while (cursor < maps.length)
+    {
+        var lineEnd = indexOfFrom(
+            maps,
+            "\n",
+            cursor
+        )
+
+        if (lineEnd < 0)
+        {
+            lineEnd = maps.length
+        }
+
+        var line = maps.substring(
+            cursor,
+            lineEnd
+        )
+
+        var region = parseMapLine(line)
+
+        if (region.valid == 1)
+        {
+            total = total + 1
+
+            if (region.mapType == "file")
+            {
+                fileMappings = fileMappings + 1
+
+                if (isSharedObject(region))
+                {
+                    sharedObjectMappings =
+                        sharedObjectMappings + 1
+
+                    if (
+                        !isProcessFile(
+                            region,
+                            processName
+                        )
+                    )
+                    {
+                        externalSoCandidateMappings =
+                            externalSoCandidateMappings + 1
+                    }
+                }
+
+                if (region.fileDeleted == 1)
+                {
+                    deletedFileMappings =
+                        deletedFileMappings + 1
+                }
+            }
+            else if (region.mapType == "heap")
+            {
+                heapMappings = heapMappings + 1
+            }
+            else if (isAnonymousRegion(region))
+            {
+                anonymousMappings =
+                    anonymousMappings + 1
+
+                if (isExecutableAnonymous(region))
+                {
+                    executableAnonymousMappings =
+                        executableAnonymousMappings + 1
+                }
+            }
+            else
+            {
+                specialMappings =
+                    specialMappings + 1
+            }
+
+            basePrinted = printRegionLabel(
+                region,
+                processName,
+                basePrinted
+            )
+
+            printRegion(region)
+        }
+
+        if (lineEnd >= maps.length)
+        {
+            cursor = maps.length
+        }
+        else
+        {
+            cursor = lineEnd + 1
+        }
+    }
+
+    println("[MAP SUMMARY]")
+    println(
+        "regions                        : " +
+        total
+    )
+    println(
+        "file mappings                  : " +
+        fileMappings
+    )
+    println(
+        "shared object mappings         : " +
+        sharedObjectMappings
+    )
+    println(
+        "external SO candidate mappings : " +
+        externalSoCandidateMappings
+    )
+    println(
+        "heap mappings                  : " +
+        heapMappings
+    )
+    println(
+        "anonymous mappings             : " +
+        anonymousMappings
+    )
+    println(
+        "special mappings               : " +
+        specialMappings
+    )
+    println(
+        "deleted file mappings          : " +
+        deletedFileMappings
+    )
+    println(
+        "executable anonymous mappings  : " +
+        executableAnonymousMappings
+    )
+    println("")
+}

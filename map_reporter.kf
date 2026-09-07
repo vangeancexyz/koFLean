@@ -1,17 +1,35 @@
-isBaseMapping(
-    MemoryRegion region,
-    String processName
-): Bool
+record FileMappingSummary(
+    Int fileMappings,
+    Int sharedObjectMappings,
+    Int externalSoCandidateMappings
+)
+
+record OtherMappingSummary(
+    Int heapMappings,
+    Int anonymousMappings,
+    Int specialMappings
+)
+
+record NotableMappingSummary(
+    Int deletedFileMappings,
+    Int executableAnonymousMappings
+)
+
+record MapSummary(
+    Int regions,
+    FileMappingSummary files,
+    OtherMappingSummary others,
+    NotableMappingSummary notable
+)
+
+isBaseMapping(MemoryRegion region, String processName): Bool
 {
     return region.mapType == "file" &&
            containsText(region.pathname, processName) &&
            isZeroHex(region.backing.offset)
 }
 
-isProcessFile(
-    MemoryRegion region,
-    String processName
-): Bool
+isProcessFile(MemoryRegion region, String processName): Bool
 {
     return region.mapType == "file" &&
            containsText(region.pathname, processName)
@@ -24,12 +42,7 @@ isSharedObject(MemoryRegion region): Bool
         return false
     }
 
-    return endsWithText(region.pathname, ".so") ||
-           containsText(region.pathname, ".so.") ||
-           containsText(
-               region.pathname,
-               ".so (deleted)"
-           )
+    return isSharedObjectPath(region.pathname)
 }
 
 isAnonymousRegion(MemoryRegion region): Bool
@@ -42,10 +55,7 @@ isAnonymousRegion(MemoryRegion region): Bool
 isExecutableAnonymous(MemoryRegion region): Bool
 {
     return isAnonymousRegion(region) &&
-           containsText(
-               region.location.permissions,
-               "x"
-           )
+           containsText(region.location.permissions, "x")
 }
 
 printRegion(MemoryRegion region)
@@ -80,10 +90,7 @@ printRegionLabel(
     Bool basePrinted
 ): Bool
 {
-    if (
-        !basePrinted &&
-        isBaseMapping(region, processName)
-    )
+    if (!basePrinted && isBaseMapping(region, processName))
     {
         println("[BASE MAPPING]")
         return true
@@ -129,33 +136,20 @@ printRegionLabel(
         }
         else
         {
-            println(
-                "[ANONYMOUS: " +
-                region.mapType +
-                "]"
-            )
+            println("[ANONYMOUS: " + region.mapType + "]")
         }
 
         return basePrinted
     }
 
-    println(
-        "[SPECIAL MAPPING: " +
-        region.mapType +
-        "]"
-    )
-
+    println("[SPECIAL MAPPING: " + region.mapType + "]")
     return basePrinted
 }
 
-scanMemoryMaps(
-    String maps,
-    String processName
-)
+scanMemoryMaps(String maps, String processName)
 {
     var cursor = 0
     var basePrinted = false
-
     var total = 0
     var fileMappings = 0
     var sharedObjectMappings = 0
@@ -168,22 +162,14 @@ scanMemoryMaps(
 
     while (cursor < maps.length)
     {
-        var lineEnd = indexOfFrom(
-            maps,
-            "\n",
-            cursor
-        )
+        var lineEnd = indexOfFrom(maps, "\n", cursor)
 
         if (lineEnd < 0)
         {
             lineEnd = maps.length
         }
 
-        var line = maps.substring(
-            cursor,
-            lineEnd
-        )
-
+        var line = maps.substring(cursor, lineEnd)
         var region = parseMapLine(line)
 
         if (region.valid == 1)
@@ -196,15 +182,9 @@ scanMemoryMaps(
 
                 if (isSharedObject(region))
                 {
-                    sharedObjectMappings =
-                        sharedObjectMappings + 1
+                    sharedObjectMappings = sharedObjectMappings + 1
 
-                    if (
-                        !isProcessFile(
-                            region,
-                            processName
-                        )
-                    )
+                    if (!isProcessFile(region, processName))
                     {
                         externalSoCandidateMappings =
                             externalSoCandidateMappings + 1
@@ -213,8 +193,7 @@ scanMemoryMaps(
 
                 if (region.fileDeleted == 1)
                 {
-                    deletedFileMappings =
-                        deletedFileMappings + 1
+                    deletedFileMappings = deletedFileMappings + 1
                 }
             }
             else if (region.mapType == "heap")
@@ -223,8 +202,7 @@ scanMemoryMaps(
             }
             else if (isAnonymousRegion(region))
             {
-                anonymousMappings =
-                    anonymousMappings + 1
+                anonymousMappings = anonymousMappings + 1
 
                 if (isExecutableAnonymous(region))
                 {
@@ -234,8 +212,7 @@ scanMemoryMaps(
             }
             else
             {
-                specialMappings =
-                    specialMappings + 1
+                specialMappings = specialMappings + 1
             }
 
             basePrinted = printRegionLabel(
@@ -258,41 +235,121 @@ scanMemoryMaps(
     }
 
     println("[MAP SUMMARY]")
-    println(
-        "regions                        : " +
-        total
-    )
-    println(
-        "file mappings                  : " +
-        fileMappings
-    )
-    println(
-        "shared object mappings         : " +
-        sharedObjectMappings
-    )
+    println("regions                        : " + total)
+    println("file mappings                  : " + fileMappings)
+    println("shared object mappings         : " + sharedObjectMappings)
     println(
         "external SO candidate mappings : " +
         externalSoCandidateMappings
     )
-    println(
-        "heap mappings                  : " +
-        heapMappings
-    )
-    println(
-        "anonymous mappings             : " +
-        anonymousMappings
-    )
-    println(
-        "special mappings               : " +
-        specialMappings
-    )
-    println(
-        "deleted file mappings          : " +
-        deletedFileMappings
-    )
+    println("heap mappings                  : " + heapMappings)
+    println("anonymous mappings             : " + anonymousMappings)
+    println("special mappings               : " + specialMappings)
+    println("deleted file mappings          : " + deletedFileMappings)
     println(
         "executable anonymous mappings  : " +
         executableAnonymousMappings
     )
     println("")
+}
+
+summarizeMemoryMaps(
+    String maps,
+    String processName
+): MapSummary
+{
+    var cursor = 0
+    var total = 0
+    var fileMappings = 0
+    var sharedObjectMappings = 0
+    var externalSoCandidateMappings = 0
+    var heapMappings = 0
+    var anonymousMappings = 0
+    var specialMappings = 0
+    var deletedFileMappings = 0
+    var executableAnonymousMappings = 0
+
+    while (cursor < maps.length)
+    {
+        var lineEnd = indexOfFrom(maps, "\n", cursor)
+
+        if (lineEnd < 0)
+        {
+            lineEnd = maps.length
+        }
+
+        var line = maps.substring(cursor, lineEnd)
+        var region = parseMapLine(line)
+
+        if (region.valid == 1)
+        {
+            total = total + 1
+
+            if (region.mapType == "file")
+            {
+                fileMappings = fileMappings + 1
+
+                if (isSharedObject(region))
+                {
+                    sharedObjectMappings = sharedObjectMappings + 1
+
+                    if (!isProcessFile(region, processName))
+                    {
+                        externalSoCandidateMappings =
+                            externalSoCandidateMappings + 1
+                    }
+                }
+
+                if (region.fileDeleted == 1)
+                {
+                    deletedFileMappings = deletedFileMappings + 1
+                }
+            }
+            else if (region.mapType == "heap")
+            {
+                heapMappings = heapMappings + 1
+            }
+            else if (isAnonymousRegion(region))
+            {
+                anonymousMappings = anonymousMappings + 1
+
+                if (isExecutableAnonymous(region))
+                {
+                    executableAnonymousMappings =
+                        executableAnonymousMappings + 1
+                }
+            }
+            else
+            {
+                specialMappings = specialMappings + 1
+            }
+        }
+
+        if (lineEnd >= maps.length)
+        {
+            cursor = maps.length
+        }
+        else
+        {
+            cursor = lineEnd + 1
+        }
+    }
+
+    return MapSummary(
+        total,
+        FileMappingSummary(
+            fileMappings,
+            sharedObjectMappings,
+            externalSoCandidateMappings
+        ),
+        OtherMappingSummary(
+            heapMappings,
+            anonymousMappings,
+            specialMappings
+        ),
+        NotableMappingSummary(
+            deletedFileMappings,
+            executableAnonymousMappings
+        )
+    )
 }

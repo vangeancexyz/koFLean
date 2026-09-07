@@ -1,0 +1,384 @@
+record ModuleIdentity(
+    String key,
+    String name,
+    String pathname,
+    String device,
+    String inode
+)
+
+record ModuleRange(
+    String base,
+    String end,
+    String permissions
+)
+
+record ModuleState(
+    Int segments,
+    Int fileDeleted,
+    Int executable,
+    Int sharedObject,
+    Int processModule
+)
+
+record RuntimeModule(
+    ModuleIdentity identity,
+    ModuleRange range,
+    ModuleState state
+)
+
+cleanModulePath(String pathname): String
+{
+    var deletedSuffix = " (deleted)"
+
+    if (endsWithText(pathname, deletedSuffix))
+    {
+        return pathname.substring(
+            0,
+            pathname.length - deletedSuffix.length
+        )
+    }
+
+    return pathname
+}
+
+moduleFileName(String pathname): String
+{
+    var cleanPath = cleanModulePath(pathname)
+    var slash = lastIndexOfText(cleanPath, "/")
+
+    if (slash < 0)
+    {
+        return cleanPath
+    }
+
+    if (slash >= cleanPath.length - 1)
+    {
+        return cleanPath
+    }
+
+    return cleanPath.substring(slash + 1, cleanPath.length)
+}
+
+isSharedObjectPath(String pathname): Bool
+{
+    var name = moduleFileName(pathname)
+
+    if (name == "ld.so.cache")
+    {
+        return false
+    }
+
+    return endsWithText(name, ".so") ||
+           containsText(name, ".so.")
+}
+
+runtimeModuleKey(MemoryRegion region): String
+{
+    return region.backing.device +
+           ":" +
+           region.backing.inode +
+           ":" +
+           cleanModulePath(region.pathname)
+}
+
+mergePermissions(String permissions, String candidate): String
+{
+    if (permissions.length == 0)
+    {
+        return candidate
+    }
+
+    if (containsText(permissions, candidate))
+    {
+        return permissions
+    }
+
+    return permissions + " | " + candidate
+}
+
+hexDigitValue(String digit): Int
+{
+    var lower = "0123456789abcdef"
+    var upper = "0123456789ABCDEF"
+    var value = indexOfFrom(lower, digit, 0)
+
+    if (value >= 0)
+    {
+        return value
+    }
+
+    return indexOfFrom(upper, digit, 0)
+}
+
+parseHexAddress(String text): Long
+{
+    if (text.length == 0)
+    {
+        return -1
+    }
+
+    var value: Long = 0
+    var cursor = 0
+
+    while (cursor < text.length)
+    {
+        var digit = text.substring(cursor, cursor + 1)
+        var digitValue = hexDigitValue(digit)
+
+        if (digitValue < 0)
+        {
+            return -1
+        }
+
+        value = value * 16 + digitValue
+        cursor = cursor + 1
+    }
+
+    return value
+}
+
+moduleSpanBytes(RuntimeModule module): Long
+{
+    var start = parseHexAddress(module.range.base)
+    var end = parseHexAddress(module.range.end)
+
+    if (start < 0 || end < start)
+    {
+        return 0
+    }
+
+    return end - start
+}
+
+isProcessModulePath(String pathname, String processName): Bool
+{
+    if (processName.length == 0)
+    {
+        return false
+    }
+
+    return moduleFileName(pathname) == processName
+}
+
+createRuntimeModule(
+    MemoryRegion region,
+    String processName
+): RuntimeModule
+{
+    var executable = 0
+    var sharedObject = 0
+    var processModule = 0
+
+    if (containsText(region.location.permissions, "x"))
+    {
+        executable = 1
+    }
+
+    if (isSharedObjectPath(region.pathname))
+    {
+        sharedObject = 1
+    }
+
+    if (isProcessModulePath(region.pathname, processName))
+    {
+        processModule = 1
+    }
+
+    return RuntimeModule(
+        ModuleIdentity(
+            runtimeModuleKey(region),
+            moduleFileName(region.pathname),
+            cleanModulePath(region.pathname),
+            region.backing.device,
+            region.backing.inode
+        ),
+        ModuleRange(
+            region.location.addressStart,
+            region.location.addressEnd,
+            region.location.permissions
+        ),
+        ModuleState(
+            1,
+            region.fileDeleted,
+            executable,
+            sharedObject,
+            processModule
+        )
+    )
+}
+
+mergeRuntimeModule(
+    RuntimeModule module,
+    MemoryRegion region,
+    String processName
+): RuntimeModule
+{
+    var base = module.range.base
+    var end = module.range.end
+    var fileDeleted = module.state.fileDeleted
+    var executable = module.state.executable
+    var sharedObject = module.state.sharedObject
+    var processModule = module.state.processModule
+
+    var currentBase = parseHexAddress(module.range.base)
+    var candidateBase = parseHexAddress(region.location.addressStart)
+
+    if (
+        candidateBase >= 0 &&
+        (currentBase < 0 || candidateBase < currentBase)
+    )
+    {
+        base = region.location.addressStart
+    }
+
+    var currentEnd = parseHexAddress(module.range.end)
+    var candidateEnd = parseHexAddress(region.location.addressEnd)
+
+    if (
+        candidateEnd >= 0 &&
+        (currentEnd < 0 || candidateEnd > currentEnd)
+    )
+    {
+        end = region.location.addressEnd
+    }
+
+    if (region.fileDeleted == 1)
+    {
+        fileDeleted = 1
+    }
+
+    if (containsText(region.location.permissions, "x"))
+    {
+        executable = 1
+    }
+
+    if (isSharedObjectPath(region.pathname))
+    {
+        sharedObject = 1
+    }
+
+    if (isProcessModulePath(region.pathname, processName))
+    {
+        processModule = 1
+    }
+
+    return RuntimeModule(
+        module.identity,
+        ModuleRange(
+            base,
+            end,
+            mergePermissions(
+                module.range.permissions,
+                region.location.permissions
+            )
+        ),
+        ModuleState(
+            module.state.segments + 1,
+            fileDeleted,
+            executable,
+            sharedObject,
+            processModule
+        )
+    )
+}
+
+findRuntimeModuleIndex(
+    List<RuntimeModule> modules,
+    String key
+): Int
+{
+    var index = 0
+
+    while (index < modules.size)
+    {
+        if (modules.get(index).identity.key == key)
+        {
+            return index
+        }
+
+        index = index + 1
+    }
+
+    return -1
+}
+
+isRuntimeModule(RuntimeModule module): Bool
+{
+    return module.state.executable == 1 ||
+           module.state.processModule == 1
+}
+
+buildModuleCatalog(
+    String maps,
+    String processName
+): List<RuntimeModule>
+{
+    var fileBackings = listOf<RuntimeModule>()
+    var cursor = 0
+
+    while (cursor < maps.length)
+    {
+        var lineEnd = indexOfFrom(maps, "\n", cursor)
+
+        if (lineEnd < 0)
+        {
+            lineEnd = maps.length
+        }
+
+        var line = maps.substring(cursor, lineEnd)
+        var region = parseMapLine(line)
+
+        if (region.valid == 1 && region.mapType == "file")
+        {
+            var key = runtimeModuleKey(region)
+            var moduleIndex = findRuntimeModuleIndex(
+                fileBackings,
+                key
+            )
+
+            if (moduleIndex < 0)
+            {
+                fileBackings.add(
+                    createRuntimeModule(region, processName)
+                )
+            }
+            else
+            {
+                fileBackings.set(
+                    moduleIndex,
+                    mergeRuntimeModule(
+                        fileBackings.get(moduleIndex),
+                        region,
+                        processName
+                    )
+                )
+            }
+        }
+
+        if (lineEnd >= maps.length)
+        {
+            cursor = maps.length
+        }
+        else
+        {
+            cursor = lineEnd + 1
+        }
+    }
+
+    var modules = listOf<RuntimeModule>()
+    var index = 0
+
+    while (index < fileBackings.size)
+    {
+        var module = fileBackings.get(index)
+
+        if (isRuntimeModule(module))
+        {
+            modules.add(module)
+        }
+
+        index = index + 1
+    }
+
+    return modules
+}

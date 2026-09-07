@@ -1,41 +1,77 @@
-main()
+main(String[] args)
 {
-    var processName = "kcalc"
+    var options = parseCliOptions(args)
 
-    println("[*] target: " + processName)
-
-    var pid = findPid(processName)
-
-    if (pid < 0)
+    if (options.help == 1)
     {
-        println("[-] Process not found")
+        printUsage()
         return
     }
 
-    println("[+] pid: " + pid)
-    println("")
+    if (options.valid == 0)
+    {
+        if (options.target.length == 0)
+        {
+            println("[-] missing process target")
+        }
+        else
+        {
+            println("[-] invalid arguments")
+        }
 
-    var maps = readProcessMaps(pid)
+        println("")
+        printUsage()
+        return
+    }
+
+    var target = resolveProcessTarget(options.target)
+
+    if (target.valid == 0)
+    {
+        println("[-] process not found: " + options.target)
+        return
+    }
+
+    var maps = readProcessMaps(target.pid)
 
     if (maps.length == 0)
     {
         println(
             "[-] cannot read /proc/" +
-            pid +
+            target.pid +
             "/maps"
         )
 
         return
     }
 
-    println(
-        "[+] maps loaded: " +
-        maps.length +
-        " characters"
-    )
-    println("")
+    var summary = summarizeMemoryMaps(maps, target.name)
+    var modules = buildModuleCatalog(maps, target.name)
 
-    scanMemoryMaps(maps, processName)
+    printInspectorHeader(
+        target.name,
+        target.pid,
+        summary.regions,
+        modules.size
+    )
+
+    if (options.moduleQuery.length > 0)
+    {
+        printModuleSearch(modules, options.moduleQuery)
+    }
+    else
+    {
+        printModuleCatalog(modules)
+    }
+
+    printNotableMappings(summary, modules)
+
+    if (options.verbose == 1)
+    {
+        println("[MEMORY REGION DETAIL]")
+        println("")
+        scanMemoryMaps(maps, target.name)
+    }
 
     println("[+] done")
 }

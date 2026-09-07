@@ -1,33 +1,85 @@
 import kof.io
 
+record ProcessTarget(
+    Int valid,
+    Int pid,
+    String name
+)
+
 findPid(String processName): Int
 {
     var pid = 1
 
     while (pid <= 131072)
     {
-        try
-        {
-            var cmdline =
-                Path("/proc/" + pid + "/cmdline").readText()
+        var candidateName = readProcessName(pid)
 
-            if (
-                cmdline.length > 0 &&
-                containsText(cmdline, processName)
-            )
-            {
-                return pid
-            }
-        }
-        catch (String e)
+        if (candidateName == processName)
         {
-            // Process non-existent, terminated, or without read permission
+            return pid
         }
 
         pid = pid + 1
     }
 
     return -1
+}
+
+readProcessName(Int pid): String
+{
+    try
+    {
+        return trimText(
+            Path("/proc/" + pid + "/comm").readText()
+        )
+    }
+    catch (String e)
+    {
+        return ""
+    }
+}
+
+resolveProcessTarget(String target): ProcessTarget
+{
+    if (target.length == 0)
+    {
+        return ProcessTarget(0, -1, "")
+    }
+
+    if (isDecimalText(target))
+    {
+        var pid = parseDecimalInt(target)
+
+        if (pid <= 0)
+        {
+            return ProcessTarget(0, -1, "")
+        }
+
+        var processName = readProcessName(pid)
+
+        if (processName.length == 0)
+        {
+            return ProcessTarget(0, -1, "")
+        }
+
+        return ProcessTarget(1, pid, processName)
+    }
+
+    var pid = findPid(target)
+
+    if (pid < 0)
+    {
+        return ProcessTarget(0, -1, "")
+    }
+
+    var processName = readProcessName(pid)
+
+    if (processName.length == 0)
+    {
+        return ProcessTarget(0, -1, "")
+    }
+
+    return ProcessTarget(1, pid, processName)
 }
 
 readProcessMaps(Int pid): String

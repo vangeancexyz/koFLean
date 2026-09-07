@@ -107,3 +107,78 @@ indexOfFrom(String text, String needle, Int start): Int
 
     return -1
 }
+
+lastIndexOfText(String text, String needle): Int
+{
+    if (needle.length == 0)
+    {
+        return text.length
+    }
+
+    if (needle.length > text.length)
+    {
+        return -1
+    }
+
+    var cursor = text.length - needle.length
+
+    while (cursor >= 0)
+    {
+        if (text.substring(cursor, cursor + needle.length) == needle)
+        {
+            return cursor
+        }
+
+        cursor = cursor - 1
+    }
+
+    return -1
+}
+
+isDecimalText(String text): Bool
+{
+    if (text.length == 0)
+    {
+        return false
+    }
+
+    var digits = "0123456789"
+    var cursor = 0
+
+    while (cursor < text.length)
+    {
+        var digit = text.substring(cursor, cursor + 1)
+
+        if (!containsText(digits, digit))
+        {
+            return false
+        }
+
+        cursor = cursor + 1
+    }
+
+    return true
+}
+
+parseDecimalInt(String text): Int
+{
+    if (!isDecimalText(text))
+    {
+        return -1
+    }
+
+    var digits = "0123456789"
+    var value = 0
+    var cursor = 0
+
+    while (cursor < text.length)
+    {
+        var digit = text.substring(cursor, cursor + 1)
+        var digitValue = indexOfFrom(digits, digit, 0)
+
+        value = value * 10 + digitValue
+        cursor = cursor + 1
+    }
+
+    return value
+}

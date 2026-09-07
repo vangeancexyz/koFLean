@@ -1,0 +1,194 @@
+printInspectorHeader(
+    String processName,
+    Int pid,
+    Int regions,
+    Int modules
+)
+{
+    println("KoFLean - Linux Runtime Module Inspector")
+    println("")
+    println("target  : " + processName)
+    println("pid     : " + pid)
+    println("regions : " + regions)
+    println("modules : " + modules)
+    println("")
+}
+
+runtimeModuleKind(RuntimeModule module): String
+{
+    if (module.state.processModule == 1)
+    {
+        return "main"
+    }
+
+    if (module.state.fileDeleted == 1)
+    {
+        return "deleted"
+    }
+
+    if (module.state.sharedObject == 1)
+    {
+        return "shared-object"
+    }
+
+    return "executable"
+}
+
+printCompactModule(RuntimeModule module)
+{
+    println(
+        "[" + runtimeModuleKind(module) + "] " +
+        "0x" + module.range.base +
+        "-0x" + module.range.end +
+        " | " + moduleSpanBytes(module) +
+        " bytes | " + module.state.segments +
+        " segments | " + module.range.permissions +
+        " | " + module.identity.pathname
+    )
+}
+
+printModuleDetails(RuntimeModule module)
+{
+    println("[MODULE FOUND]")
+    println("name        : " + module.identity.name)
+    println("kind        : " + runtimeModuleKind(module))
+    println("base        : 0x" + module.range.base)
+    println("end         : 0x" + module.range.end)
+    println("span        : " + moduleSpanBytes(module) + " bytes")
+    println("segments    : " + module.state.segments)
+    println("permissions : " + module.range.permissions)
+    println("device      : " + module.identity.device)
+    println("inode       : " + module.identity.inode)
+    println("path        : " + module.identity.pathname)
+
+    if (module.state.fileDeleted == 1)
+    {
+        println("deleted     : yes")
+    }
+    else
+    {
+        println("deleted     : no")
+    }
+
+    println("")
+}
+
+printModuleCatalog(List<RuntimeModule> modules)
+{
+    println("[MODULE CATALOG]")
+
+    var index = 0
+
+    while (index < modules.size)
+    {
+        printCompactModule(modules.get(index))
+        index = index + 1
+    }
+
+    println("")
+}
+
+moduleMatchesQuery(
+    RuntimeModule module,
+    String query
+): Bool
+{
+    return containsText(module.identity.name, query) ||
+           containsText(module.identity.pathname, query)
+}
+
+countModuleMatches(
+    List<RuntimeModule> modules,
+    String query
+): Int
+{
+    var matches = 0
+    var index = 0
+
+    while (index < modules.size)
+    {
+        if (moduleMatchesQuery(modules.get(index), query))
+        {
+            matches = matches + 1
+        }
+
+        index = index + 1
+    }
+
+    return matches
+}
+
+printModuleSearch(
+    List<RuntimeModule> modules,
+    String query
+)
+{
+    var matches = countModuleMatches(modules, query)
+
+    println("[MODULE SEARCH]")
+    println("query   : " + query)
+    println("matches : " + matches)
+    println("")
+
+    if (matches == 0)
+    {
+        println("[-] module not found")
+        println("")
+        return
+    }
+
+    var index = 0
+
+    while (index < modules.size)
+    {
+        var module = modules.get(index)
+
+        if (moduleMatchesQuery(module, query))
+        {
+            printModuleDetails(module)
+        }
+
+        index = index + 1
+    }
+}
+
+countDeletedRuntimeModules(
+    List<RuntimeModule> modules
+): Int
+{
+    var deleted = 0
+    var index = 0
+
+    while (index < modules.size)
+    {
+        if (modules.get(index).state.fileDeleted == 1)
+        {
+            deleted = deleted + 1
+        }
+
+        index = index + 1
+    }
+
+    return deleted
+}
+
+printNotableMappings(
+    MapSummary summary,
+    List<RuntimeModule> modules
+)
+{
+    println("[NOTABLE MAPPINGS]")
+    println(
+        "deleted runtime modules        : " +
+        countDeletedRuntimeModules(modules)
+    )
+    println(
+        "deleted file mappings          : " +
+        summary.notable.deletedFileMappings
+    )
+    println(
+        "executable anonymous mappings  : " +
+        summary.notable.executableAnonymousMappings
+    )
+    println("")
+}
